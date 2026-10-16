@@ -52,7 +52,11 @@ Traditional Chinese. When the system lists several preferred languages, the
 first one with a catalogue wins.
 
 Song, album, artist and playlist names come from Spotify or their creators and
-are kept as provided, as are lyric lines and failure details. Generated queue
+are kept as provided, as are lyric lines and failure details. Spotify is asked
+for them in the interface language, so where Spotify has a localized name, such
+as 제니 for JENNIE in Korean, that is the one shown. See
+[Names in the interface language](how-it-connects.md#names-in-the-interface-language)
+for which requests carry it. Generated queue
 playlist names translate the surrounding words while retaining the song title
 or the date in `YYYY-MM-DD` form.
 

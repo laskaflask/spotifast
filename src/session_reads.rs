@@ -163,11 +163,12 @@ pub async fn prerelease(
     let mut page = page.ok_or_else(|| anyhow::anyhow!("Spotify did not return this prerelease"))?;
     let login = session.login5().auth_token().await?;
     let client_token = session.spclient().client_token().await?;
+    let locale = web.language().tag();
     let mut offset = 0;
     loop {
         let query = serde_json::json!({
             "operationName":"getAlbum",
-            "variables":{"uri":page.album.uri,"locale":"","offset":offset,"limit":50},
+            "variables":{"uri":page.album.uri,"locale":locale,"offset":offset,"limit":50},
             "extensions":{"persistedQuery":{"version":1,"sha256Hash":GET_ALBUM_HASH}}
         });
         let body = web

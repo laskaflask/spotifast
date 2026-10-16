@@ -438,6 +438,11 @@ impl ApiClient {
             .ok_or(ApiError::NotSignedIn)
     }
 
+    /// The interface language Spotify is asked to name things in.
+    pub(crate) fn language(&self) -> crate::i18n::Locale {
+        self.http.language()
+    }
+
     fn http_client(&self) -> Result<reqwest::Client> {
         self.http.client().map_err(ApiError::Network)
     }
@@ -465,6 +470,10 @@ impl ApiClient {
             .post(endpoint)
             .bearer_auth(bearer)
             .header("client-token", client_token)
+            .header(
+                reqwest::header::ACCEPT_LANGUAGE,
+                self.http.accept_language(),
+            )
             .json(query)
             .send()
             .await?;
@@ -565,6 +574,10 @@ impl ApiClient {
                 .map_err(ApiError::Network)?
                 .request(method.clone(), &url)
                 .bearer_auth(&token)
+                .header(
+                    reqwest::header::ACCEPT_LANGUAGE,
+                    self.http.accept_language(),
+                )
                 .query(query);
             if let Some(jpeg) = jpeg {
                 request = request
@@ -1603,6 +1616,58 @@ mod tests {
             Arc::new(|_| {}),
         ))));
         client
+    }
+
+    /// Reads one request's head and answers it with an empty JSON object.
+    async fn answer_one(listener: tokio::net::TcpListener) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut request = Vec::new();
+        while !request.ends_with(b"\r\n\r\n") {
+            request.push(socket.read_u8().await.unwrap());
+        }
+        socket
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")
+            .await
+            .unwrap();
+        String::from_utf8(request).unwrap().to_ascii_lowercase()
+    }
+
+    /// Spotify names artists in English unless asked otherwise, so 제니
+    /// would read JENNIE in a Korean interface.
+    #[tokio::test]
+    async fn web_api_requests_ask_for_the_interface_language() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let client = client_with_token(
+            Some(format!("http://{}", listener.local_addr().unwrap())),
+            "test-only",
+        );
+        client.http.set_language(crate::i18n::Locale::Korean);
+        let server = tokio::spawn(answer_one(listener));
+        client.send(Method::GET, "/ping", &[], None).await.unwrap();
+        let request = server.await.unwrap();
+        assert!(request.contains("\r\naccept-language: ko\r\n"), "{request}");
+    }
+
+    #[tokio::test]
+    async fn pathfinder_requests_ask_for_the_interface_language() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut client = ApiClient::new(
+            reqwest::Client::builder().no_proxy().build().unwrap(),
+            Arc::new(NetActivity::default()),
+            20,
+            50,
+            ApiSource::Personal,
+        );
+        client.base_url = Some(format!("http://{}", listener.local_addr().unwrap()));
+        client.http.set_language(crate::i18n::Locale::Japanese);
+        let server = tokio::spawn(answer_one(listener));
+        client
+            .partner_request("dummy", "dummy", &serde_json::json!({}))
+            .await
+            .unwrap();
+        let request = server.await.unwrap();
+        assert!(request.contains("\r\naccept-language: ja\r\n"), "{request}");
     }
 
     #[tokio::test]

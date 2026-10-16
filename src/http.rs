@@ -3,6 +3,7 @@
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use crate::i18n::Locale;
 use crate::settings::ProxyConfig;
 
 /// A cheap-to-clone handle to the process HTTP client.
@@ -10,15 +11,20 @@ use crate::settings::ProxyConfig;
 /// Replacing the inner client updates every clone: the Web API, token
 /// refresh, artwork, lyrics, and the update check all pick up a new proxy
 /// on the next request.
+///
+/// The handle also carries the interface language, which Spotify requests
+/// send as `Accept-Language` so names come back in the listener's language.
 #[derive(Clone)]
 pub struct Http {
     inner: Arc<RwLock<Result<reqwest::Client, String>>>,
+    language: Arc<RwLock<Locale>>,
 }
 
 impl Http {
     pub fn new(client: reqwest::Client) -> Self {
         Self {
             inner: Arc::new(RwLock::new(Ok(client))),
+            language: Arc::default(),
         }
     }
 
@@ -31,6 +37,7 @@ impl Http {
     pub fn unavailable(error: String) -> Self {
         Self {
             inner: Arc::new(RwLock::new(Err(error))),
+            language: Arc::default(),
         }
     }
 
@@ -47,6 +54,27 @@ impl Http {
             .read()
             .unwrap_or_else(|lock| lock.into_inner())
             .clone()
+    }
+
+    /// Changes the language every clone asks Spotify for, from the next request.
+    pub fn set_language(&self, locale: Locale) {
+        *self
+            .language
+            .write()
+            .unwrap_or_else(|lock| lock.into_inner()) = locale;
+    }
+
+    pub fn language(&self) -> Locale {
+        *self
+            .language
+            .read()
+            .unwrap_or_else(|lock| lock.into_inner())
+    }
+
+    /// The `Accept-Language` value for Spotify requests. Without one Spotify
+    /// answers in English, so an artist such as 제니 arrives as JENNIE.
+    pub fn accept_language(&self) -> reqwest::header::HeaderValue {
+        reqwest::header::HeaderValue::from_static(self.language().tag())
     }
 }
 
@@ -161,6 +189,26 @@ mod tests {
         http.replace(build_client(&ProxyConfig::Off).unwrap());
         assert!(artwork.client().is_ok());
         assert!(api.client().is_ok());
+    }
+
+    #[test]
+    fn the_language_is_shared_by_clones_and_survives_a_new_client() {
+        let http = Http::unavailable("Restoring proxy settings".into());
+        let api = http.clone();
+        assert_eq!(api.accept_language(), "en", "English until told otherwise");
+        http.set_language(Locale::Korean);
+        http.replace(build_client(&ProxyConfig::Off).unwrap());
+        assert_eq!(api.language(), Locale::Korean);
+        assert_eq!(api.accept_language(), "ko");
+    }
+
+    #[test]
+    fn every_locale_is_a_valid_accept_language_value() {
+        for locale in <Locale as clap::ValueEnum>::value_variants() {
+            let http = Http::default();
+            http.set_language(*locale);
+            assert_eq!(http.accept_language(), locale.tag());
+        }
     }
 
     #[test]

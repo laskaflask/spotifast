@@ -1114,6 +1114,7 @@ pub use fastframe_shell::Waker;
 pub struct Backend {
     commands: mpsc::UnboundedSender<Command>,
     events: std::sync::mpsc::Receiver<Event>,
+    http: Http,
     art: ArtLoader,
     activity: Arc<NetActivity>,
     thread: Option<std::thread::JoinHandle<()>>,
@@ -1158,6 +1159,7 @@ impl Backend {
         web_client_id: Option<String>,
         waker: Waker,
         restore_sign_in: bool,
+        language: crate::i18n::Locale,
     ) -> Self {
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (event_tx, event_rx) = std::sync::mpsc::channel();
@@ -1177,6 +1179,8 @@ impl Backend {
                 Http::unavailable(error)
             })
         };
+        http.set_language(language);
+        let backend_http = http.clone();
         let art = ArtLoader::new(http.clone(), runtime.handle().clone(), dirs.art_cache_dir());
         let activity = Arc::new(NetActivity::default());
 
@@ -1211,6 +1215,7 @@ impl Backend {
         Self {
             commands: command_tx,
             events: event_rx,
+            http: backend_http,
             art,
             activity,
             thread: Some(thread),
@@ -1246,6 +1251,17 @@ impl Backend {
             #[cfg(test)]
             home_cache_stores: std::sync::Mutex::new(Vec::new()),
         }
+    }
+
+    /// Asks Spotify for names in this language from the next request on.
+    /// Pages already loaded keep the names they arrived with.
+    pub fn set_language(&self, locale: crate::i18n::Locale) {
+        self.http.set_language(locale);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn language(&self) -> crate::i18n::Locale {
+        self.http.language()
     }
 
     /// Live network activity, for the interface's busy indicator.

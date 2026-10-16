@@ -101,6 +101,7 @@ struct Request<'a> {
     country: &'a str,
     timezone: &'a str,
     context_token: &'a str,
+    accept_language: reqwest::header::HeaderValue,
 }
 
 impl MadeForYou {
@@ -179,6 +180,7 @@ impl MadeForYou {
             country: &country,
             timezone: timezone.iana_name().unwrap_or("UTC"),
             context_token: &context_token,
+            accept_language: self.http.accept_language(),
         };
         let (made_for_you, top_mixes) = tokio::join!(
             read_section(&request, MADE_FOR_YOU),
@@ -221,6 +223,10 @@ async fn read_section(request: &Request<'_>, section: &str) -> Result<Vec<Playli
             .post(ENDPOINT)
             .bearer_auth(request.token)
             .header("client-token", request.client_token)
+            .header(
+                reqwest::header::ACCEPT_LANGUAGE,
+                request.accept_language.clone(),
+            )
             .json(&query(
                 section,
                 request.country,
