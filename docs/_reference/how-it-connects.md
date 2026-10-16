@@ -152,6 +152,22 @@ engine starts at the volume being heard. This recovery applies to unexpected
 disconnects; changing audio settings still restarts the engine with its
 current-track pickup.
 
+## Names in the interface language
+
+Spotify answers in English unless a request names another language, and for
+some artists and titles it keeps a name per language: in Korean, IU is 아이유.
+Web API requests and Pathfinder requests (Made for you, upcoming albums) send
+the interface language as `Accept-Language`, using the tag from
+[Languages and coverage](translating.md#languages-and-coverage). Pathfinder
+`getAlbum` also receives it as its `locale` variable. Changing the language in
+Settings applies from the next request. Pages and caches already loaded keep
+the names they arrived with until they are read again.
+
+Reads through the playback session (the playing song's details from librespot,
+radio stations, session playlist reads and extended metadata) go through
+librespot's own client, which sends no language, so they still arrive in
+Spotify's default form.
+
 ## What the client stores
 
 - Since 0.8.0, shared and personal Web API grants

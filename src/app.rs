@@ -804,14 +804,15 @@ impl App {
             std::sync::Arc::clone(&tap),
             std::sync::Arc::clone(&eq),
         );
+        let locale = settings.language.resolve();
         let backend = Backend::spawn(
             dirs.clone(),
             engine_config,
             settings.web_client_id.clone(),
             waker.clone(),
             options.restore_sign_in,
+            locale,
         );
-        let locale = settings.language.resolve();
         let applied_proxy = if options.restore_sign_in {
             crate::settings::ProxyConfig::Invalid(
                 gettext(locale, "Restoring proxy settings").into_owned(),
@@ -10377,6 +10378,7 @@ impl App {
             Action::SetLanguage(choice) => {
                 self.settings.language = choice;
                 self.locale = choice.resolve();
+                self.backend.set_language(self.locale);
                 self.mark_settings_dirty();
                 ctx.request_repaint();
             }
@@ -18308,6 +18310,11 @@ mod tests {
         let choice = LanguageChoice::Locale(Locale::PortugueseBrazil);
         app.apply(Action::SetLanguage(choice), &ctx);
         assert_eq!(app.locale, Locale::PortugueseBrazil);
+        assert_eq!(
+            app.backend.language(),
+            Locale::PortugueseBrazil,
+            "Spotify is asked for names in the chosen language"
+        );
         assert!(app.settings_dirty);
         app.save_settings();
         app.flush_files();
@@ -18325,6 +18332,7 @@ mod tests {
         );
         restarted.backend.shutdown();
         assert_eq!(restarted.locale, Locale::PortugueseBrazil);
+        assert_eq!(restarted.backend.language(), Locale::PortugueseBrazil);
         std::fs::remove_dir_all(app.dirs.config.parent().unwrap()).unwrap();
     }
 

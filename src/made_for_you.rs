@@ -134,6 +134,10 @@ impl MadeForYou {
                 .post(ENDPOINT)
                 .bearer_auth(&token.access_token)
                 .header("client-token", &client_token)
+                .header(
+                    reqwest::header::ACCEPT_LANGUAGE,
+                    self.http.accept_language(),
+                )
                 .json(&query(&session.country(), timezone, &context_token, offset))
                 .send()
                 .await
